@@ -1,17 +1,19 @@
 import datetime
-import os
+
 
 class Ghost:
-    def __init__(self,path):
+    def __init__(self, path):
         self.face_symbols = {
             "[普通]": 0,
             "[笑い]": 1,
-            "[怒り]": 2,
-            "[泣き]": 3
+            "[泣き]": 2,
+            "[怒り]": 3,
+            "[紹介]": 4,
+            "[放心]": 5,
+            "[振り向き]": 6
         }
-        self.name="ちーちゃん"
-        self.path= path
-
+        self.name = "ちーちゃん"
+        self.path = path
 
     def Base(self):
         with open(self.path+"/prompt_template.txt", "r") as f:
