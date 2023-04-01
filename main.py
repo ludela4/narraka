@@ -143,6 +143,7 @@ class TextEntryWindowController(AppKit.NSObject):
         cancelButton.setTarget_(self)
         cancelButton.setAction_(b"cancel:")
         self.window.contentView().addSubview_(cancelButton)
+        self.window.setLevel_(AppKit.NSFloatingWindowLevel)
 
         return self
 
