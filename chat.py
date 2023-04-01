@@ -7,7 +7,6 @@ def setApiKey(key):
 
 
 def talk(messages=None, text=None):
-    print("talktring ")
     if messages is None:
         messages = [{"role": "user", "content": text}]
     try:
@@ -17,7 +16,6 @@ def talk(messages=None, text=None):
         )
     except Exception as e:
         print(e)
-    print("res", response)
     messages.append(response.choices[0].message)
     return messages
 
@@ -48,7 +46,6 @@ def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
     # return 100
     try:
         encoding = innertiktoken.encoding_for_model(model)
-        print("encoding",encoding)
     except KeyError:
         encoding = innertiktoken.get_encoding("cl100k_base")
     if model == "gpt-3.5-turbo":

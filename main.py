@@ -24,6 +24,16 @@ def safe_path(path):
     return os.path.join(base_path, path)
 
 
+def path_in_savedir(path):
+    app_data_dir = os.path.expanduser('~/Library/Application Support/narraka')
+
+    # ディレクトリが存在しない場合は作成
+    if not os.path.exists(app_data_dir):
+        os.makedirs(app_data_dir)
+    path_in_dir = os.path.join(app_data_dir, path)
+    return path_in_dir
+
+
 def load_external_module(module_name, module_file):
     # base_path
     external_module_dir = safe_path("ghosts")
@@ -187,15 +197,7 @@ class DraggableImageView(AppKit.NSImageView):
         self.mouseDownEvent = event
         self.initialWindowFrame = self.window().frame()
         self.mouseDownTime = time.time()
-
-    def mouseDragged_(self, event):
-        deltaX = event.locationInWindow().x - self.mouseDownEvent.locationInWindow().x
-        deltaY = event.locationInWindow().y - self.mouseDownEvent.locationInWindow().y
-
-        windowFrame = self.initialWindowFrame
-        windowFrame.origin.x += deltaX
-        windowFrame.origin.y += deltaY
-        self.window().setFrame_display_(windowFrame, True)
+        self.controller.window.mouseDown_(event)
 
     def mouseUp_(self, event):
         elapsedTime = time.time() - self.mouseDownTime
@@ -254,28 +256,28 @@ class DraggableImageView(AppKit.NSImageView):
 
 class DraggableWindow(AppKit.NSWindow):
     def init(self):
-        super().init()
+        self=super().init()
         # 新しい属性値を定義する
         self.closed = False
+        self.baseWare = None
         return self
+    
+    def canBecomeKeyWindow(self):
+        return True
+
+    def setBaseWare_(self,base_ware):
+        self.baseWare=base_ware
 
     def mouseDown_(self, event):
         self.mouseDownEvent = event
-        self.initialWindowFrame = self.frame()
+        self.performWindowDragWithEvent_(event)
         self.mouseDownTime = time.time()
-
-    def mouseDragged_(self, event):
-        deltaX = event.locationInWindow().x - self.mouseDownEvent.locationInWindow().x
-        deltaY = event.locationInWindow().y - self.mouseDownEvent.locationInWindow().y
-
-        windowFrame = self.initialWindowFrame
-        windowFrame.origin.x += deltaX
-        windowFrame.origin.y += deltaY
-        self.setFrame_display_(windowFrame, True)
 
     def mouseUp_(self, event):
         elapsedTime = time.time() - self.mouseDownTime
-        if self.mouseDownEvent.locationInWindow() == event.locationInWindow() and elapsedTime <= 0.2:
+        if self.mouseDownEvent.locationInWindow() == event.locationInWindow() \
+                and elapsedTime <= 0.2 \
+                and self.baseWare and not self.baseWare.talkWindowController.talking:
             self.close()
 
     def close(self):
@@ -302,7 +304,6 @@ class ImageWindowController(AppKit.NSObject):
             AppKit.NSWindowStyleMaskTitled | AppKit.NSWindowStyleMaskFullSizeContentView,
             AppKit.NSBackingStoreBuffered,
             False)
-
         self.setupWindow()
         return self
 
@@ -321,6 +322,7 @@ class ImageWindowController(AppKit.NSObject):
         self.window.contentView().setWantsLayer_(True)
         self.window.contentView().superview().setWantsLayer_(True)
         self.window.contentView().superview().layer().setBorderWidth_(0)
+        self.window.setLevel_(AppKit.NSFloatingWindowLevel)
 
     def setSurfaceId_(self, surface_id):
         img_path = self.baseWare.shell.surfaces[surface_id]
@@ -369,6 +371,7 @@ class TalkWindowController(AppKit.NSObject):
                 AppKit.NSWindowStyleMaskTitled,
                 AppKit.NSBackingStoreBuffered,
                 False)
+            self.window.setBaseWare_(baseWare)
             self.setupWindow()
             self.delay = 0.1
             self.messages = []
@@ -385,6 +388,7 @@ class TalkWindowController(AppKit.NSObject):
         self.window.setBackgroundColor_(AppKit.NSColor.whiteColor())
         self.window.setTitlebarAppearsTransparent_(True)
         self.window.setTitleVisibility_(AppKit.NSWindowTitleHidden)
+        self.window.setLevel_(AppKit.NSFloatingWindowLevel)
 
         self.talkTextView = ClickThroughTextView.alloc().initWithFrame_(
             AppKit.NSMakeRect(20, 10, 260, 180))
@@ -628,7 +632,7 @@ class ApiKeyController(AppKit.NSObject):
 class BaseWare:
     def __init__(self):
         self.ghost_booted = False
-        self.data_path=safe_path("save/data.yaml")
+        self.data_path = path_in_savedir("data.yaml")
 
     def initializeMessages(self):
         self.saveMessages([self.ghost.Base()])
@@ -638,6 +642,7 @@ class BaseWare:
             json.dump(messages, f, ensure_ascii=False)
 
     def saveGeneralData(self):
+
         with open(self.data_path, 'w') as f:
             yaml.dump(self.data, f)
 
@@ -734,8 +739,8 @@ def loadShell(name):
 
 
 def getGhostInfos():
-    ghost_info_paths_list = sorted(glob.glob( safe_path("ghosts/*/ghost_info.yaml")))
-    print("ghost_info list", ghost_info_paths_list)
+    ghost_info_paths_list = sorted(
+        glob.glob(safe_path("ghosts/*/ghost_info.yaml")))
     ghost_infos = {}
     for ghost_info_path in ghost_info_paths_list:
         with open(ghost_info_path) as f:
