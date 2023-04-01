@@ -14,6 +14,29 @@ from shell import Shell
 from app_delegate import AppDelegate
 from collections.abc import Iterable
 import yaml
+import os
+import sys
+
+
+def safe_path(path):
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(
+        os.path.abspath(__file__)))
+    return os.path.join(base_path, path)
+
+
+def load_external_module(module_name, module_file):
+    # base_path
+    external_module_dir = safe_path("ghosts")
+    if external_module_dir not in sys.path:
+        sys.path.append(external_module_dir)
+
+    # 外部モジュールをインポート
+    spec = importlib.util.spec_from_file_location(
+        module_name, os.path.join(external_module_dir, module_file))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    return module
 
 
 class DraggableAreaView(AppKit.NSView):
@@ -49,7 +72,6 @@ class PlaceholderTextView(AppKit.NSTextView):
 class TextEntryWindowController(AppKit.NSObject):
     def init(self):
         self = super().init()
-        
 
         return self
 
@@ -131,7 +153,6 @@ class TextEntryWindowController(AppKit.NSObject):
         text = self.textField.stringValue()
         self.close()
         self.action(text)
-    
 
 
 class DraggableImageView(AppKit.NSImageView):
@@ -140,7 +161,7 @@ class DraggableImageView(AppKit.NSImageView):
 
     def initWithFrame_Controller_ImagePath_(self, frame, controller, image_path):
         self.initWithFrame_(frame)
-        self.surfaces = sorted(glob.glob("shell/surface[0-9]*.png"))
+        # self.surfaces = sorted(glob.glob("shell/surface[0-9]*.png"))
         image = AppKit.NSImage.alloc().initWithContentsOfFile_(image_path)
         self.setImage_(image)
         self.controller = controller
@@ -222,9 +243,9 @@ class DraggableImageView(AppKit.NSImageView):
 
     def sendText_(self, sender):
         self.controller.baseWare.talkWindowController.textEntryWindowController.show()
+
     def registerApiKey_(self, sender):
         self.controller.baseWare.apiKeyController.show()
-
 
     def switchGhost_(self, sender):
         ghost_name = sender.keyEquivalent()
@@ -353,7 +374,7 @@ class TalkWindowController(AppKit.NSObject):
             self.messages = []
             self.talking = False
             self.textEntryWindowController = TextEntryWindowController.alloc(
-            ).initWithAction_Placeholder_(self.talkMessage_,"文章を入力してください")
+            ).initWithAction_Placeholder_(self.talkMessage_, "文章を入力してください")
         return self
 
     def talkMessage_(self, text):
@@ -503,7 +524,7 @@ class TalkWindowController(AppKit.NSObject):
         isFirstSymbol = True
         if not isinstance(response, Iterable):
             print(response)
-            text=f"エラーが発生しました。\n\n{response}"
+            text = f"エラーが発生しました。\n\n{response}"
             self.performSelectorOnMainThread_withObject_waitUntilDone_(
                 objc.selector(None, selector=b"updateTalkLabel:",
                               signature=b"v@:@"),
@@ -583,18 +604,22 @@ class TalkWindowController(AppKit.NSObject):
         AppKit.NSRunLoop.currentRunLoop().runUntilDate_(
             AppKit.NSDate.dateWithTimeIntervalSinceNow_(self.delay))
 
+
 class ApiKeyController(AppKit.NSObject):
     def initWithBaseWare_(self, baseWare):
         self = super().init()
         if self:
-            self.baseWare=baseWare
-            self.textEntryWindowController=TextEntryWindowController.alloc().initWithAction_Placeholder_(self.registerApiKey_,"OpenAIのAPIキーを入力してください")
+            self.baseWare = baseWare
+            self.textEntryWindowController = TextEntryWindowController.alloc(
+            ).initWithAction_Placeholder_(self.registerApiKey_, "OpenAIのAPIキーを入力してください")
         return self
+
     def show(self):
         self.textEntryWindowController.show()
-    def registerApiKey_(self,api_key):
+
+    def registerApiKey_(self, api_key):
         chat.setApiKey(api_key)
-        self.baseWare.data["API_Key"]=str(api_key)
+        self.baseWare.data["API_Key"] = str(api_key)
         self.baseWare.saveGeneralData()
         if not self.baseWare.ghost_booted:
             self.baseWare.ghostBoot()
@@ -603,6 +628,7 @@ class ApiKeyController(AppKit.NSObject):
 class BaseWare:
     def __init__(self):
         self.ghost_booted = False
+        self.data_path=safe_path("save/data.yaml")
 
     def initializeMessages(self):
         self.saveMessages([self.ghost.Base()])
@@ -612,12 +638,12 @@ class BaseWare:
             json.dump(messages, f, ensure_ascii=False)
 
     def saveGeneralData(self):
-        with open('data.yaml', 'w') as f:
+        with open(self.data_path, 'w') as f:
             yaml.dump(self.data, f)
 
     def loadGeneralData(self):
-        if os.path.exists('data.yaml'):
-            with open('data.yaml', 'r') as f:
+        if os.path.exists(self.data_path):
+            with open(self.data_path, 'r') as f:
                 self.data = yaml.safe_load(f)
         else:
             self.data = {}
@@ -662,7 +688,6 @@ class BaseWare:
 
             threading.Thread(target=refresh_talk, daemon=True).start()
             self.ghost_booted = True
-        
 
     def appBoot(self):
         self.loadGeneralData()
@@ -672,7 +697,7 @@ class BaseWare:
         self.shell = loadShell(name)
         self.imageWindowController = ImageWindowController.alloc().initWithBaseWare_(self)
         self.talkWindowController = TalkWindowController.alloc().initWithBaseWare_(self)
-        self.apiKeyController=ApiKeyController.alloc().initWithBaseWare_(self)
+        self.apiKeyController = ApiKeyController.alloc().initWithBaseWare_(self)
         app = AppKit.NSApplication.sharedApplication()
         appDelegate = AppDelegate.alloc().initWithBaseware_(self)
         app.setDelegate_(appDelegate)
@@ -681,19 +706,36 @@ class BaseWare:
 
 
 def loadGhost(name):
-    module_name = f"ghosts.{name}.ghost"
-    module = importlib.import_module(module_name)
+    # if getattr(sys, 'frozen', False):
+    #         # PyInstallerによってパッケージングされた実行可能ファイルの場合
+    #     base_path = sys._MEIPASS
+    # else:
+    #     # スクリプトが直接実行されている場合
+    #     base_path = os.path.abspath(".")
+
+    # module_path = f"{base_path}/ghosts/{name}/ghost.py"
+    # module_name = "ghost"
+    # print("module_path",module_path,module_name)
+    # spec = importlib.util.spec_from_file_location(module_name, module_path)
+    # module = importlib.util.module_from_spec(spec)
+    # spec.loader.exec_module(module)
+    # module_name = f"ghosts.{name}.ghost"
+    # module = importlib.import_module(module_name)
+    selected_module_file = f"{name}/ghost.py"
+    module = load_external_module('selected_module', selected_module_file)
     Ghost = module.Ghost
-    ghost = Ghost()
+    ghost = Ghost(safe_path(f"ghosts/{name}"))
     return ghost
 
 
 def loadShell(name):
-    return Shell(f"ghosts/{name}/shell")
+    shell_path = safe_path(f"ghosts/{name}/shell")
+    return Shell(shell_path)
 
 
 def getGhostInfos():
-    ghost_info_paths_list = sorted(glob.glob("ghosts/*/ghost_info.yaml"))
+    ghost_info_paths_list = sorted(glob.glob( safe_path("ghosts/*/ghost_info.yaml")))
+    print("ghost_info list", ghost_info_paths_list)
     ghost_infos = {}
     for ghost_info_path in ghost_info_paths_list:
         with open(ghost_info_path) as f:

@@ -2,7 +2,7 @@ import datetime
 import os
 
 class Ghost:
-    def __init__(self):
+    def __init__(self,path):
         self.face_symbols = {
             "[普通]": 0,
             "[呆れ]": 1,
@@ -10,7 +10,7 @@ class Ghost:
             "[困惑]": 3
         }
         self.name="セルヴィ"
-        self.path= os.path.dirname(__file__)
+        self.path= path
 
 
     def Base(self):
