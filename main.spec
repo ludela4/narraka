@@ -28,7 +28,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='main',
+    name='narraka',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -44,7 +44,7 @@ exe = EXE(
 )
 app = BUNDLE(
     exe,
-    name='main.app',
+    name='narraka.app',
     icon=None,
     bundle_identifier=None,
 )
