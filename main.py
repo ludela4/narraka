@@ -16,6 +16,8 @@ from collections.abc import Iterable
 import yaml
 import os
 import sys
+import ghosts_ext_models.default as ghost_ext
+import shutil
 
 
 def safe_path(path):
@@ -228,6 +230,10 @@ class DraggableImageView(AppKit.NSImageView):
             "APIキーを登録", objc.selector(self.registerApiKey_), "")
         menu.addItem_(registerApiItem)
 
+        # registerApiItem = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        #     "メモリーをリセット", objc.selector(self.memoryReset_), "")
+        # menu.addItem_(registerApiItem)
+
         changeGhostMenu = AppKit.NSMenu.alloc().init()
         # サブメニューアイテムを作成
         ghost_infos = getGhostInfos()
@@ -244,6 +250,9 @@ class DraggableImageView(AppKit.NSImageView):
 
         return menu
 
+    def memoryReset_(self,sender):
+        self.controller.baseWare.initializeMessages(force=True)
+        self.controller.baseWare.talkWindowController.chatBackground_(self.ghost.OnBoot())
     def sendText_(self, sender):
         self.controller.baseWare.talkWindowController.textEntryWindowController.show()
 
@@ -257,17 +266,17 @@ class DraggableImageView(AppKit.NSImageView):
 
 class DraggableWindow(AppKit.NSWindow):
     def init(self):
-        self=super().init()
+        self = super().init()
         # 新しい属性値を定義する
         self.closed = False
         self.baseWare = None
         return self
-    
+
     def canBecomeKeyWindow(self):
         return True
 
-    def setBaseWare_(self,base_ware):
-        self.baseWare=base_ware
+    def setBaseWare_(self, base_ware):
+        self.baseWare = base_ware
 
     def mouseDown_(self, event):
         self.mouseDownEvent = event
@@ -635,8 +644,9 @@ class BaseWare:
         self.ghost_booted = False
         self.data_path = path_in_savedir("data.yaml")
 
-    def initializeMessages(self):
-        self.saveMessages([self.ghost.Base()])
+    def initializeMessages(self,force=True):
+        if not os.path.exists(self.ghost.path+"/messages.json") or force:
+            self.saveMessages([self.ghost.Base()])
 
     def saveMessages(self, messages):
         with open(self.ghost.path+"/messages.json", "w") as f:
@@ -665,18 +675,19 @@ class BaseWare:
             messages = json.load(f)
         return messages
 
-    def changeGhost(self, name):
-        self.ghost = loadGhost(name)
-        self.shell = loadShell(name)
+    def changeGhost(self, path):
+        self.ghost = loadGhost(path)
+        self.shell = loadShell(path)
         self.initializeMessages()
         self.imageWindowController.setSurfaceId_(0)
         self.talkWindowController.chatBackground_(self.ghost.OnBoot())
+        self.data["ghost"] = str(path)
+        self.saveGeneralData()
 
     def boot(self):
         self.appBoot()
 
     def ghostBoot(self):
-        # if 0:
         if "API_Key" not in self.data.keys():
             self.apiKeyController.show()
         else:
@@ -696,11 +707,17 @@ class BaseWare:
             self.ghost_booted = True
 
     def appBoot(self):
+        locateSampleGhostsExt()
         self.loadGeneralData()
         self.initilizeSetting()
-        name = "selvi"
-        self.ghost = loadGhost(name)
-        self.shell = loadShell(name)
+        ghosts = getGhostInfos()
+        if "ghost" in self.data.keys() and self.data["ghost"] in ghosts.keys():
+            path = self.data["ghost"]
+        else:
+            name = "selvi"
+            path = searchGhostPathFromName(name)
+        self.ghost = loadGhost(path)
+        self.shell = loadShell(path)
         self.imageWindowController = ImageWindowController.alloc().initWithBaseWare_(self)
         self.talkWindowController = TalkWindowController.alloc().initWithBaseWare_(self)
         self.apiKeyController = ApiKeyController.alloc().initWithBaseWare_(self)
@@ -708,25 +725,17 @@ class BaseWare:
         appDelegate = AppDelegate.alloc().initWithBaseware_(self)
         app.setDelegate_(appDelegate)
         app.run()
-        # threading.Thread(target=app.run, daemon=True).start()
 
 
-def loadGhost(name):
-    # if getattr(sys, 'frozen', False):
-    #         # PyInstallerによってパッケージングされた実行可能ファイルの場合
-    #     base_path = sys._MEIPASS
-    # else:
-    #     # スクリプトが直接実行されている場合
-    #     base_path = os.path.abspath(".")
+def loadGhost(path):
+    if os.path.basename(os.path.dirname(path)) == "ghosts_ext":
+        return loadGhostExt(path)
+    else:
+        return loadGhostInt(path)
 
-    # module_path = f"{base_path}/ghosts/{name}/ghost.py"
-    # module_name = "ghost"
-    # print("module_path",module_path,module_name)
-    # spec = importlib.util.spec_from_file_location(module_name, module_path)
-    # module = importlib.util.module_from_spec(spec)
-    # spec.loader.exec_module(module)
-    # module_name = f"ghosts.{name}.ghost"
-    # module = importlib.import_module(module_name)
+
+def loadGhostInt(path):
+    name = os.path.basename(path)
     selected_module_file = f"{name}/ghost.py"
     module = load_external_module('selected_module', selected_module_file)
     Ghost = module.Ghost
@@ -734,22 +743,45 @@ def loadGhost(name):
     return ghost
 
 
-def loadShell(name):
-    shell_path = safe_path(f"ghosts/{name}/shell")
+def loadGhostExt(path):
+    ghost = ghost_ext.Ghost(path)
+    return ghost
+
+
+def loadShell(path):
+    shell_path = path+"/shell"
     return Shell(shell_path)
+
+
+def locateSampleGhostsExt():
+    path = path_in_savedir("ghosts_ext")
+    if not os.path.exists(path):
+        os.makedirs(path)
+    shutil.copytree(safe_path("ghosts_ext/sample"),
+                    path_in_savedir("ghosts_ext/sample"), dirs_exist_ok=True)
 
 
 def getGhostInfos():
     ghost_info_paths_list = sorted(
         glob.glob(safe_path("ghosts/*/ghost_info.yaml")))
+    ghost_info_paths_list += sorted(
+        glob.glob(path_in_savedir("ghosts_ext/*/ghost.yaml")))
     ghost_infos = {}
     for ghost_info_path in ghost_info_paths_list:
         with open(ghost_info_path) as f:
             ghost_info = yaml.safe_load(f)
-        ghost_dir = os.path.basename(os.path.dirname(ghost_info_path))
+        ghost_dir = os.path.dirname(ghost_info_path)
         ghost_infos[ghost_dir] = ghost_info["name"]
-
     return ghost_infos
+
+
+def searchGhostPathFromName(query):
+    ghosts = getGhostInfos()
+    for path, jname in ghosts.items():
+        name = os.path.basename(path)
+        if name == query:
+            return path
+    raise Exception("発見できませんでした")
 
 
 def main():

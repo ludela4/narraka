@@ -1,13 +1,14 @@
-name: "サンプル"
-face_symbols:
+name: "サンプル" # キャラの名前
+face_symbols: # 表情と対応するサーフェスid（surface0001.png → 1, surface0002.png → 2）を記載
   "[普通]": 0
   "[怒り]": 1
   "[笑い]": 2
   "[ドヤ顔]": 3
   "[困惑]": 4
   "[泣き]": 5
-basefile: "prompt_template.txt"
-OnInterval: "{ランダムトーク}"
+# 以下の部分は基本そのままで良いと思います。
+basefile: "prompt_template.txt"          # ベースになる初回プロンプトファイル
+OnInterval: "{ランダムトーク}"              # 各状況におけるプロンプト
 OnClicked: "{ユーザーアクション: 体をつつく}"
 OnBoot: "起動しました。"
 OnClose: "さようなら　{コマンド: シャットダウン}"
