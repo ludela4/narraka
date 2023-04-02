@@ -1,0 +1,13 @@
+name: "サンプル"
+face_symbols:
+  "[普通]": 0
+  "[怒り]": 1
+  "[笑い]": 2
+  "[ドヤ顔]": 3
+  "[困惑]": 4
+  "[泣き]": 5
+basefile: "prompt_template.txt"
+OnInterval: "{ランダムトーク}"
+OnClicked: "{ユーザーアクション: 体をつつく}"
+OnBoot: "起動しました。"
+OnClose: "さようなら　{コマンド: シャットダウン}"
